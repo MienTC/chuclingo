@@ -104,19 +104,33 @@ export default function SlideViewer() {
     }));
   };
 
+  const canvasRef = React.useRef(null);
+
   const persistDrawingToBackend = async () => {
-    const drawingData = annotations[currentSlideIndex] || currentSlideDrawing;
-    if (!drawingData) return;
+    let drawingData = annotations[currentSlideIndex] || currentSlideDrawing;
+    if (canvasRef.current && canvasRef.current.getDataURL) {
+      const activeData = canvasRef.current.getDataURL();
+      if (activeData) drawingData = activeData;
+    }
+
+    if (!drawingData) {
+      showToast('Chưa có nét vẽ để lưu');
+      return;
+    }
 
     try {
       await axios.post(`/api/annotations/${id}`, {
         slideIndex: currentSlideIndex,
         drawingData
       });
-      showToast('Đã lưu nét vẽ');
+      setAnnotations((prev) => ({
+        ...prev,
+        [currentSlideIndex]: drawingData
+      }));
+      showToast('Đã lưu nét vẽ thành công');
     } catch (err) {
       console.error(err);
-      showToast('Lỗi khi lưu nét vẽ');
+      showToast('Lỗi khi lưu nét vẽ: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -436,6 +450,7 @@ export default function SlideViewer() {
 
           {/* Interactive Drawing Layer Overlay */}
           <DrawingCanvas
+            ref={canvasRef}
             isDrawingMode={isDrawingMode}
             color={color}
             lineWidth={lineWidth}

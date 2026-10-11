@@ -108,18 +108,41 @@ export default function Admin() {
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target.result;
-      setMarkdown(content);
-      const cleanName = file.name.replace(/\.md$/, '').replace(/[-_]/g, ' ');
-      if (!title) setTitle(cleanName);
-    };
-    reader.readAsText(file);
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+
+    if (ext === '.pptx') {
+      try {
+        setLoading(true);
+        setMessage('Đang xử lý và bóc tách slide từ file PowerPoint (.pptx)...');
+        const formData = new FormData();
+        formData.append('markdown', file);
+        formData.append('title', cleanName);
+        formData.append('topic', selectedTopic);
+
+        const res = await axios.post('/api/lessons', formData);
+        setMarkdown(res.data.data.rawContent || '');
+        if (!title) setTitle(cleanName);
+        setMessage('Đã chuyển đổi thành công slide PowerPoint (.pptx) thành bài giảng!');
+        fetchLessons();
+        setLoading(false);
+      } catch (err) {
+        setMessage('Lỗi khi đọc file PowerPoint: ' + (err.response?.data?.message || err.message));
+        setLoading(false);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target.result;
+        setMarkdown(content);
+        if (!title) setTitle(cleanName);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleSaveLesson = async (e) => {
@@ -532,7 +555,7 @@ export default function Admin() {
                 )}
               </div>
 
-              {/* Upload markdown file */}
+              {/* Upload markdown or pptx file */}
               <div style={{
                 border: '1px dashed #cbd5e1',
                 borderRadius: '8px',
@@ -544,15 +567,15 @@ export default function Admin() {
               }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '13px', color: '#0284c7' }}>
-                    Tải file Markdown (.md) lên:
+                    Tải file Markdown (.md) hoặc PowerPoint (.pptx) lên:
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b' }}>
-                    Hệ thống tự động phân tách slide theo dấu <code>---</code>
+                    Hệ thống tự động phân tách slide và bóc tách nội dung
                   </div>
                 </div>
                 <input
                   type="file"
-                  accept=".md,text/markdown"
+                  accept=".md,.pptx,text/markdown,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                   onChange={handleFileUpload}
                   style={{ fontSize: '12px', color: '#64748b' }}
                 />

@@ -4,6 +4,48 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const matter = require('gray-matter');
+const JSZip = require('jszip');
+
+// Helper to extract texts from PPTX slides
+async function extractPptxToMarkdown(buffer, fallbackTitle = 'Bài giảng PPTX') {
+  const zip = await JSZip.loadAsync(buffer);
+  const slideFiles = [];
+
+  zip.forEach((relativePath) => {
+    if (relativePath.match(/^ppt\/slides\/slide\d+\.xml$/i)) {
+      slideFiles.push(relativePath);
+    }
+  });
+
+  // Sort slides numerically: slide1, slide2, slide10...
+  slideFiles.sort((a, b) => {
+    const numA = parseInt(a.match(/slide(\d+)\.xml/)[1], 10);
+    const numB = parseInt(b.match(/slide(\d+)\.xml/)[1], 10);
+    return numA - numB;
+  });
+
+  const slides = [];
+  for (const slideFile of slideFiles) {
+    const xml = await zip.file(slideFile).async('string');
+    // Extract text elements <a:t>text</a:t>
+    const matches = xml.match(/<a:t[^>]*>(.*?)<\/a:t>/gi) || [];
+    const textLines = matches
+      .map((m) => m.replace(/<[^>]+>/g, '').trim())
+      .filter((t) => t.length > 0);
+
+    if (textLines.length > 0) {
+      // First line as slide header, rest as paragraphs/bullet points
+      const header = `# ${textLines[0]}`;
+      const body = textLines.slice(1).map((line) => `- ${line}`).join('\n');
+      slides.push(`${header}\n\n${body}`);
+    } else {
+      slides.push(`# Slide ${slides.length + 1}`);
+    }
+  }
+
+  const headerMatter = `---\ntitle: "${fallbackTitle}"\ntopic: "Bài giảng PPTX"\n---\n\n`;
+  return headerMatter + slides.join('\n\n---\n\n');
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -246,8 +288,8 @@ app.get('/api/lessons/:id', (req, res) => {
   }
 });
 
-// 4. POST /api/lessons - Create lesson with audios array
-app.post('/api/lessons', upload.single('markdown'), (req, res) => {
+// 4. POST /api/lessons - Create lesson with audios array (accepts .md or .pptx)
+app.post('/api/lessons', upload.single('markdown'), async (req, res) => {
   try {
     let filename;
     let content;
@@ -260,10 +302,19 @@ app.post('/api/lessons', upload.single('markdown'), (req, res) => {
     filename = `${autoId}.md`;
 
     if (req.file) {
-      content = fs.readFileSync(req.file.path, 'utf-8');
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (ext === '.pptx') {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const originalTitle = path.basename(req.file.originalname, ext);
+        content = await extractPptxToMarkdown(fileBuffer, title || originalTitle);
+        // Clean uploaded temp pptx
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      } else {
+        content = fs.readFileSync(req.file.path, 'utf-8');
+      }
     } else {
       if (!markdown) {
-        return res.status(400).json({ success: false, message: 'Cần nội dung markdown' });
+        return res.status(400).json({ success: false, message: 'Cần nội dung markdown hoặc file pptx' });
       }
 
       const parsed = matter(markdown);

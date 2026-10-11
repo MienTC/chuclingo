@@ -1,16 +1,31 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 
-export default function DrawingCanvas({
+const DrawingCanvas = forwardRef(function DrawingCanvas({
   isDrawingMode,
   color,
   lineWidth,
   tool, // 'pencil' | 'eraser'
   savedData,
   onSave
-}) {
+}, ref) {
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
+
+  // Expose methods to parent
+  useImperativeHandle(ref, () => ({
+    getDataURL: () => {
+      const canvas = canvasRef.current;
+      return canvas ? canvas.toDataURL() : null;
+    },
+    clear: () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+  }));
 
   // Resize canvas without heavy re-render
   const setupCanvas = () => {
@@ -19,12 +34,10 @@ export default function DrawingCanvas({
     const parent = canvas.parentElement;
     if (!parent) return;
 
-    // Use current dimensions
     const width = parent.clientWidth;
     const height = parent.clientHeight;
 
     if (canvas.width !== width || canvas.height !== height) {
-      // Preserve drawing
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
@@ -69,7 +82,7 @@ export default function DrawingCanvas({
     }
   }, [savedData]);
 
-  // Pure fast touch & pointer coordinate extraction
+  // Coordinate extraction
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -81,7 +94,7 @@ export default function DrawingCanvas({
     };
   };
 
-  // POINTER EVENTS API (Prevents screen moving, ultra fast 120fps hardware accelerated)
+  // POINTER EVENTS API
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -159,7 +172,6 @@ export default function DrawingCanvas({
       }
     };
 
-    // Attach native non-passive listeners with touch-action: none
     canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
     canvas.addEventListener('pointermove', onPointerMove, { passive: false });
     canvas.addEventListener('pointerup', onPointerUp, { passive: false });
@@ -184,11 +196,13 @@ export default function DrawingCanvas({
         height: '100%',
         zIndex: isDrawingMode ? 30 : 5,
         pointerEvents: isDrawingMode ? 'auto' : 'none',
-        touchAction: 'none', // STOPS SCREEN FROM MOVING / SCROLLING WHILE DRAWING
+        touchAction: 'none',
         userSelect: 'none',
         WebkitUserSelect: 'none',
         cursor: isDrawingMode ? (tool === 'eraser' ? 'cell' : 'crosshair') : 'default'
       }}
     />
   );
-}
+});
+
+export default DrawingCanvas;
