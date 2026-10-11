@@ -24,7 +24,9 @@ export default function DrawingCanvas({
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(canvas, 0, 0);
+    if (canvas.width > 0 && canvas.height > 0) {
+      tempCtx.drawImage(canvas, 0, 0);
+    }
 
     canvas.width = parent.clientWidth;
     canvas.height = parent.clientHeight;
@@ -33,7 +35,6 @@ export default function DrawingCanvas({
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Restore if already had content or savedData
     if (tempCanvas.width > 0 && tempCanvas.height > 0) {
       ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
     }
@@ -79,15 +80,15 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    // Save current canvas state to history for undo
-    setHistory((prev) => [...prev, canvas.toDataURL()]);
+    // Save history for Undo
+    setHistory((prev) => [...prev.slice(-10), canvas.toDataURL()]);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
 
     if (tool === 'eraser') {
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = lineWidth * 3;
+      ctx.lineWidth = Math.max(lineWidth * 5, 20); // Eraser width
     } else {
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = color;
@@ -113,11 +114,29 @@ export default function DrawingCanvas({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     ctx.closePath();
+    ctx.globalCompositeOperation = 'source-over'; // Reset mode
     setIsDrawing(false);
 
-    // Trigger auto-save callback
     if (onSave) {
       onSave(canvas.toDataURL());
+    }
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const lastState = history[history.length - 1];
+    setHistory((prev) => prev.slice(0, -1));
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (lastState) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        if (onSave) onSave(canvas.toDataURL());
+      };
+      img.src = lastState;
     }
   };
 
@@ -139,7 +158,7 @@ export default function DrawingCanvas({
         height: '100%',
         zIndex: isDrawingMode ? 20 : 10,
         pointerEvents: isDrawingMode ? 'auto' : 'none',
-        cursor: isDrawingMode ? (tool === 'eraser' ? 'crosshair' : 'crosshair') : 'default'
+        cursor: isDrawingMode ? (tool === 'eraser' ? 'cell' : 'crosshair') : 'default'
       }}
     />
   );

@@ -247,3 +247,20 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Print / PDF Export Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body, html {
+    background: #ffffff !important;
+  }
+  .slide-card-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}

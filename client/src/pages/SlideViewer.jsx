@@ -7,6 +7,7 @@ import rehypeRaw from 'rehype-raw';
 import DrawingCanvas from '../components/DrawingCanvas';
 import AudioBar from '../components/AudioBar';
 import AudioModal from '../components/AudioModal';
+import VirtualKeyboard from '../components/VirtualKeyboard';
 
 const COLORS = [
   '#ef4444', // Red
@@ -28,15 +29,16 @@ export default function SlideViewer() {
 
   // Drawing state
   const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [tool, setTool] = useState('pencil');
+  const [tool, setTool] = useState('pencil'); // 'pencil' | 'eraser'
   const [color, setColor] = useState('#ef4444');
-  const [lineWidth, setLineWidth] = useState(3);
+  const [lineWidth, setLineWidth] = useState(4);
   const [annotations, setAnnotations] = useState({});
   const [currentSlideDrawing, setCurrentSlideDrawing] = useState(null);
   const [saveToast, setSaveToast] = useState('');
 
-  // Audio list state
+  // Audio list & Virtual keyboard
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [currentAudios, setCurrentAudios] = useState([]);
 
   useEffect(() => {
@@ -57,7 +59,6 @@ export default function SlideViewer() {
         setAnnotations(annotRes.data.data);
       }
 
-      // Populate audios list
       const list = l.audios && l.audios.length > 0 ? l.audios : (l.audio ? [{ filename: l.audio, title: l.audio, url: `/audio/${l.audio}` }] : []);
       setCurrentAudios(list);
 
@@ -136,6 +137,24 @@ export default function SlideViewer() {
     }
   };
 
+  // Download Markdown (.md)
+  const downloadMarkdown = () => {
+    if (!lesson || !lesson.rawContent) return;
+    const blob = new Blob([lesson.rawContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${lesson.id || 'slide'}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Đang tải file bài giảng (.md)...');
+  };
+
+  // Print to PDF
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   const showToast = (msg) => {
     setSaveToast(msg);
     setTimeout(() => setSaveToast(''), 2500);
@@ -174,19 +193,19 @@ export default function SlideViewer() {
       position: 'relative'
     }}>
       {/* Top Header */}
-      <header style={{
+      <header className="no-print" style={{
         height: '60px',
-        padding: '0 20px',
+        padding: '0 16px',
         background: '#ffffff',
         borderBottom: '1px solid #e2e8f0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         zIndex: 50,
-        gap: '14px'
+        gap: '12px'
       }}>
         {/* Left: Exit & Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             onClick={() => navigate('/')}
             className="duo-btn duo-btn-secondary"
@@ -196,7 +215,7 @@ export default function SlideViewer() {
           </button>
 
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {lesson.title}
             </div>
             <div style={{ fontSize: '12px', color: '#64748b' }}>
@@ -206,7 +225,7 @@ export default function SlideViewer() {
         </div>
 
         {/* Center: Slide Progress Bar */}
-        <div style={{ flex: 1, maxWidth: '260px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ flex: 1, maxWidth: '240px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{
             flex: 1,
             height: '8px',
@@ -227,13 +246,43 @@ export default function SlideViewer() {
           </span>
         </div>
 
-        {/* Right Section: Multi Audio Bar & Clean Pencil Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Right Section: Multi Audio Bar, Keyboard, Download & Drawing Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {/* Multi Audio Bar */}
           <AudioBar
             audioList={currentAudios}
             onOpenModal={() => setIsAudioModalOpen(true)}
           />
+
+          {/* Virtual Keyboard Toggle Button */}
+          <button
+            onClick={() => setIsKeyboardOpen(!isKeyboardOpen)}
+            className={`duo-btn ${isKeyboardOpen ? 'duo-btn-blue' : 'duo-btn-secondary'}`}
+            style={{ padding: '5px 10px', fontSize: '12px' }}
+            title="Bàn phím ảo tiếng Trung & Pinyin"
+          >
+            Bàn phím
+          </button>
+
+          {/* Download Slide Dropdown/Buttons */}
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={downloadMarkdown}
+              className="duo-btn duo-btn-secondary"
+              style={{ padding: '5px 8px', fontSize: '12px' }}
+              title="Tải file Markdown bài giảng"
+            >
+              Tải .MD
+            </button>
+            <button
+              onClick={handlePrintPDF}
+              className="duo-btn duo-btn-secondary"
+              style={{ padding: '5px 8px', fontSize: '12px' }}
+              title="Xuất slide ra PDF (In slide)"
+            >
+              Xuất PDF
+            </button>
+          </div>
 
           {/* Clean Drawing Tools in Header */}
           <div style={{
@@ -267,8 +316,9 @@ export default function SlideViewer() {
                     fontSize: '12px',
                     cursor: 'pointer'
                   }}
+                  title={tool === 'pencil' ? 'Chuyển sang tẩy nét vẽ' : 'Chuyển sang bút vẽ'}
                 >
-                  {tool === 'pencil' ? 'Bút' : 'Tẩy'}
+                  {tool === 'pencil' ? 'Bút' : 'Tẩy nét'}
                 </button>
 
                 {tool === 'pencil' && (
@@ -302,9 +352,9 @@ export default function SlideViewer() {
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
-                  title="Xóa nét vẽ"
+                  title="Xóa hết nét vẽ trên slide này"
                 >
-                  Xóa
+                  Xóa hết
                 </button>
 
                 <button
@@ -350,7 +400,7 @@ export default function SlideViewer() {
           flexDirection: 'column',
           overflow: 'hidden',
           boxShadow: '0 4px 15px rgba(0,0,0,0.04)'
-        }}>
+        }} className="slide-card-container">
           {/* Slide Markdown Content */}
           <div
             style={{
@@ -409,7 +459,7 @@ export default function SlideViewer() {
       </main>
 
       {/* Footer Navigation Bar */}
-      <footer style={{
+      <footer className="no-print" style={{
         height: '64px',
         background: '#ffffff',
         borderTop: '1px solid #e2e8f0',
@@ -453,6 +503,16 @@ export default function SlideViewer() {
           Tiếp theo
         </button>
       </footer>
+
+      {/* Virtual Keyboard */}
+      <VirtualKeyboard
+        isOpen={isKeyboardOpen}
+        onClose={() => setIsKeyboardOpen(false)}
+        onInsertChar={(char) => {
+          navigator.clipboard.writeText(char);
+          showToast(`Đã sao chép ký tự "${char}"`);
+        }}
+      />
 
       {/* Audio Modal */}
       <AudioModal
