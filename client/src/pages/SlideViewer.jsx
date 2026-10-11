@@ -7,7 +7,6 @@ import rehypeRaw from 'rehype-raw';
 import DrawingCanvas from '../components/DrawingCanvas';
 import AudioBar from '../components/AudioBar';
 import AudioModal from '../components/AudioModal';
-import VirtualKeyboard from '../components/VirtualKeyboard';
 
 const COLORS = [
   '#ef4444', // Red
@@ -36,9 +35,8 @@ export default function SlideViewer() {
   const [currentSlideDrawing, setCurrentSlideDrawing] = useState(null);
   const [saveToast, setSaveToast] = useState('');
 
-  // Audio list & Virtual keyboard
+  // Audio list
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [currentAudios, setCurrentAudios] = useState([]);
 
   useEffect(() => {
@@ -253,16 +251,6 @@ export default function SlideViewer() {
             audioList={currentAudios}
             onOpenModal={() => setIsAudioModalOpen(true)}
           />
-
-          {/* Virtual Keyboard Toggle Button */}
-          <button
-            onClick={() => setIsKeyboardOpen(!isKeyboardOpen)}
-            className={`duo-btn ${isKeyboardOpen ? 'duo-btn-blue' : 'duo-btn-secondary'}`}
-            style={{ padding: '5px 10px', fontSize: '12px' }}
-            title="Bàn phím ảo tiếng Trung & Pinyin"
-          >
-            Bàn phím
-          </button>
 
           {/* Download Slide Dropdown/Buttons */}
           <div style={{ display: 'flex', gap: '4px' }}>
@@ -503,16 +491,6 @@ export default function SlideViewer() {
           Tiếp theo
         </button>
       </footer>
-
-      {/* Virtual Keyboard */}
-      <VirtualKeyboard
-        isOpen={isKeyboardOpen}
-        onClose={() => setIsKeyboardOpen(false)}
-        onInsertChar={(char) => {
-          navigator.clipboard.writeText(char);
-          showToast(`Đã sao chép ký tự "${char}"`);
-        }}
-      />
 
       {/* Audio Modal */}
       <AudioModal
