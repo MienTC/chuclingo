@@ -264,3 +264,241 @@ body {
     box-shadow: none !important;
   }
 }
+
+/* App Main Content Container */
+.duo-main-content {
+  margin-left: 240px;
+  flex: 1;
+  padding: 32px 40px;
+  max-width: 1200px;
+  min-height: 100vh;
+}
+
+/* Mobile Header & Bottom Navigation */
+.duo-mobile-header {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+}
+
+.duo-mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  z-index: 100;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.duo-mobile-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex: 1;
+  height: 100%;
+  transition: color 0.15s ease;
+}
+.duo-mobile-nav-btn:hover,
+.duo-mobile-nav-btn.active {
+  color: #0284c7;
+}
+.duo-mobile-nav-btn .nav-icon {
+  font-size: 18px;
+}
+
+/* Toast Notification Styles */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+  animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastSlideIn {
+  from {
+    transform: translateY(-16px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Chinese Slide Typography & Marp Elements */
+.slide-content-area .pinyin {
+  font-size: 34px;
+  color: #16a34a;
+  text-align: center;
+  font-weight: 700;
+  margin: 8px 0 4px 0;
+  letter-spacing: 0.5px;
+}
+
+.slide-content-area .hanviet {
+  text-align: center;
+  font-style: italic;
+  color: #64748b;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.slide-content-area img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+/* Admin Grid Layout */
+.admin-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+}
+
+/* Mobile Responsive Media Queries */
+@media (max-width: 768px) {
+  .duo-sidebar {
+    display: none !important;
+  }
+
+  .duo-main-content {
+    margin-left: 0 !important;
+    padding: 16px 14px 80px 14px !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .duo-mobile-header {
+    display: flex !important;
+  }
+
+  .duo-mobile-bottom-nav {
+    display: flex !important;
+  }
+
+  .mobile-only-tabs {
+    display: flex !important;
+  }
+
+  .admin-left-col.mobile-hide,
+  .admin-right-col.mobile-hide {
+    display: none !important;
+  }
+
+  .admin-left-col.mobile-show {
+    display: flex !important;
+  }
+
+  .admin-right-col.mobile-show {
+    display: block !important;
+  }
+
+  .admin-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .toast-container {
+    left: 12px !important;
+    right: 12px !important;
+    top: 12px !important;
+    max-width: calc(100% - 24px) !important;
+  }
+
+  /* Slide Viewer Mobile */
+  .slide-card-container {
+    height: calc(100vh - 125px) !important;
+    max-width: 100% !important;
+    border-radius: 8px !important;
+  }
+
+  .slide-content-area {
+    padding: 18px 14px !important;
+  }
+
+  .slide-content-area h1 {
+    font-size: 1.55rem !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .slide-content-area h2 {
+    font-size: 1.3rem !important;
+    margin-top: 14px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .slide-content-area .pinyin {
+    font-size: 26px !important;
+  }
+
+  .slide-content-area .hanviet {
+    font-size: 14px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .slide-content-area p,
+  .slide-content-area li {
+    font-size: 15px !important;
+  }
+
+  .desktop-tools {
+    display: none !important;
+  }
+
+  .mobile-tools-toggle {
+    display: flex !important;
+  }
+
+  .slide-dots-desktop {
+    display: none !important;
+  }
+
+  .slide-counter-mobile {
+    display: block !important;
+  }
+}
+
+
+

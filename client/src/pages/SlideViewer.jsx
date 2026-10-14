@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
@@ -7,6 +7,7 @@ import rehypeRaw from 'rehype-raw';
 import DrawingCanvas from '../components/DrawingCanvas';
 import AudioBar from '../components/AudioBar';
 import AudioModal from '../components/AudioModal';
+import { useToast } from '../components/Toast';
 
 const COLORS = [
   '#ef4444', // Red
@@ -20,6 +21,7 @@ const COLORS = [
 export default function SlideViewer() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [lesson, setLesson] = useState(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -33,11 +35,15 @@ export default function SlideViewer() {
   const [lineWidth, setLineWidth] = useState(4);
   const [annotations, setAnnotations] = useState({});
   const [currentSlideDrawing, setCurrentSlideDrawing] = useState(null);
-  const [saveToast, setSaveToast] = useState('');
 
-  // Audio list
+  // Audio list & mobile toolbar toggle
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
   const [currentAudios, setCurrentAudios] = useState([]);
+  const [showMobileTools, setShowMobileTools] = useState(false);
+
+  // Touch gesture tracking
+  const touchStartX = useRef(0);
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     fetchLessonData();
@@ -63,6 +69,7 @@ export default function SlideViewer() {
       setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Lỗi khi tải bài học');
+      toast.error('Lỗi khi tải bài học: ' + (err.response?.data?.message || err.message));
       setLoading(false);
     }
   };
@@ -96,6 +103,23 @@ export default function SlideViewer() {
     }
   };
 
+  // Touch swipe handlers
+  const handleTouchStart = (e) => {
+    if (isDrawingMode) return;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (isDrawingMode) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX.current - touchEndX;
+    if (diff > 50) {
+      goToNextSlide(); // Swipe left -> Next
+    } else if (diff < -50) {
+      goToPrevSlide(); // Swipe right -> Prev
+    }
+  };
+
   const handleCanvasSave = (dataUrl) => {
     setCurrentSlideDrawing(dataUrl);
     setAnnotations((prev) => ({
@@ -103,8 +127,6 @@ export default function SlideViewer() {
       [currentSlideIndex]: dataUrl
     }));
   };
-
-  const canvasRef = React.useRef(null);
 
   const persistDrawingToBackend = async () => {
     let drawingData = annotations[currentSlideIndex] || currentSlideDrawing;
@@ -114,7 +136,7 @@ export default function SlideViewer() {
     }
 
     if (!drawingData) {
-      showToast('Chưa có nét vẽ để lưu');
+      toast.warning('Chưa có nét vẽ để lưu');
       return;
     }
 
@@ -127,10 +149,10 @@ export default function SlideViewer() {
         ...prev,
         [currentSlideIndex]: drawingData
       }));
-      showToast('Đã lưu nét vẽ thành công');
+      toast.success('Đã lưu nét vẽ slide thành công!');
     } catch (err) {
       console.error(err);
-      showToast('Lỗi khi lưu nét vẽ: ' + (err.response?.data?.message || err.message));
+      toast.error('Lỗi khi lưu nét vẽ: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -143,9 +165,13 @@ export default function SlideViewer() {
         return updated;
       });
       setCurrentSlideDrawing(null);
-      showToast('Đã xóa nét vẽ');
+      if (canvasRef.current && canvasRef.current.clear) {
+        canvasRef.current.clear();
+      }
+      toast.info('Đã xóa nét vẽ trên slide này');
     } catch (err) {
       console.error(err);
+      toast.error('Lỗi khi xóa nét vẽ');
     }
   };
 
@@ -159,17 +185,12 @@ export default function SlideViewer() {
     a.download = `${lesson.id || 'slide'}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Đang tải file bài giảng (.md)...');
+    toast.info('Đang tải file bài giảng (.md)...');
   };
 
   // Print to PDF
   const handlePrintPDF = () => {
     window.print();
-  };
-
-  const showToast = (msg) => {
-    setSaveToast(msg);
-    setTimeout(() => setSaveToast(''), 2500);
   };
 
   if (loading) {
@@ -182,9 +203,9 @@ export default function SlideViewer() {
 
   if (error || !lesson) {
     return (
-      <div style={{ textAlign: 'center', paddingTop: '100px' }}>
+      <div style={{ textAlign: 'center', paddingTop: '100px', paddingLeft: '20px', paddingRight: '20px' }}>
         <h2 style={{ color: '#ef4444' }}>{error || 'Không tìm thấy bài học'}</h2>
-        <Link to="/" className="duo-btn duo-btn-blue" style={{ marginTop: '16px' }}>
+        <Link to="/" className="duo-btn duo-btn-blue" style={{ marginTop: '16px', display: 'inline-block' }}>
           Quay lại danh sách
         </Link>
       </div>
@@ -206,41 +227,41 @@ export default function SlideViewer() {
     }}>
       {/* Top Header */}
       <header className="no-print" style={{
-        height: '60px',
-        padding: '0 16px',
+        minHeight: '56px',
+        padding: '0 12px',
         background: '#ffffff',
         borderBottom: '1px solid #e2e8f0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         zIndex: 50,
-        gap: '12px'
+        gap: '8px'
       }}>
         {/* Left: Exit & Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
           <button
             onClick={() => navigate('/')}
             className="duo-btn duo-btn-secondary"
-            style={{ padding: '6px 12px', fontSize: '13px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', flexShrink: 0 }}
           >
-            Thoát
+            ← Thoát
           </button>
 
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {lesson.title}
             </div>
-            <div style={{ fontSize: '12px', color: '#64748b' }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>
               {lesson.topic}
             </div>
           </div>
         </div>
 
-        {/* Center: Slide Progress Bar */}
-        <div style={{ flex: 1, maxWidth: '240px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Center: Slide Progress Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <div style={{
-            flex: 1,
-            height: '8px',
+            width: '80px',
+            height: '6px',
             background: '#e2e8f0',
             borderRadius: '999px',
             overflow: 'hidden'
@@ -253,20 +274,20 @@ export default function SlideViewer() {
               transition: 'width 0.2s ease'
             }} />
           </div>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>
             {currentSlideIndex + 1}/{lesson.slides.length}
           </span>
         </div>
 
-        {/* Right Section: Multi Audio Bar, Keyboard, Download & Drawing Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Multi Audio Bar */}
+        {/* Right Section Desktop Tools */}
+        <div className="desktop-tools" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Audio Bar */}
           <AudioBar
             audioList={currentAudios}
             onOpenModal={() => setIsAudioModalOpen(true)}
           />
 
-          {/* Download Slide Dropdown/Buttons */}
+          {/* Download & Export */}
           <div style={{ display: 'flex', gap: '4px' }}>
             <button
               onClick={downloadMarkdown}
@@ -274,7 +295,7 @@ export default function SlideViewer() {
               style={{ padding: '5px 8px', fontSize: '12px' }}
               title="Tải file Markdown bài giảng"
             >
-              Tải .MD
+              .MD
             </button>
             <button
               onClick={handlePrintPDF}
@@ -282,11 +303,11 @@ export default function SlideViewer() {
               style={{ padding: '5px 8px', fontSize: '12px' }}
               title="Xuất slide ra PDF (In slide)"
             >
-              Xuất PDF
+              PDF
             </button>
           </div>
 
-          {/* Clean Drawing Tools in Header */}
+          {/* Desktop Drawing Tools */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -301,7 +322,7 @@ export default function SlideViewer() {
               className={`duo-btn ${isDrawingMode ? 'duo-btn-blue' : 'duo-btn-secondary'}`}
               style={{ padding: '5px 10px', fontSize: '12px' }}
             >
-              {isDrawingMode ? 'Đang vẽ' : 'Vẽ'}
+              {isDrawingMode ? '✏️ Bật vẽ' : '✏️ Vẽ'}
             </button>
 
             {isDrawingMode && (
@@ -318,9 +339,9 @@ export default function SlideViewer() {
                     fontSize: '12px',
                     cursor: 'pointer'
                   }}
-                  title={tool === 'pencil' ? 'Chuyển sang tẩy nét vẽ' : 'Chuyển sang bút vẽ'}
+                  title={tool === 'pencil' ? 'Chuyển sang tẩy' : 'Chuyển sang bút'}
                 >
-                  {tool === 'pencil' ? 'Bút' : 'Tẩy nét'}
+                  {tool === 'pencil' ? 'Bút' : 'Tẩy'}
                 </button>
 
                 {tool === 'pencil' && (
@@ -356,7 +377,7 @@ export default function SlideViewer() {
                   }}
                   title="Xóa hết nét vẽ trên slide này"
                 >
-                  Xóa hết
+                  Xóa
                 </button>
 
                 <button
@@ -378,18 +399,127 @@ export default function SlideViewer() {
             )}
           </div>
         </div>
+
+        {/* Mobile Tools Toggle Button */}
+        <div className="mobile-tools-toggle" style={{ display: 'none' }}>
+          <button
+            onClick={() => setShowMobileTools(!showMobileTools)}
+            className={`duo-btn ${showMobileTools ? 'duo-btn-blue' : 'duo-btn-secondary'}`}
+            style={{ padding: '6px 10px', fontSize: '12px' }}
+          >
+            🛠️ Menu
+          </button>
+        </div>
       </header>
 
+      {/* Mobile Expandable Tools Bar */}
+      {showMobileTools && (
+        <div className="no-print mobile-tools-drawer" style={{
+          background: '#ffffff',
+          borderBottom: '1px solid #cbd5e1',
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          zIndex: 45
+        }}>
+          {/* Audio bar row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <AudioBar
+              audioList={currentAudios}
+              onOpenModal={() => setIsAudioModalOpen(true)}
+            />
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                onClick={downloadMarkdown}
+                className="duo-btn duo-btn-secondary"
+                style={{ padding: '5px 8px', fontSize: '11px' }}
+              >
+                .MD
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                className="duo-btn duo-btn-secondary"
+                style={{ padding: '5px 8px', fontSize: '11px' }}
+              >
+                PDF
+              </button>
+            </div>
+          </div>
+
+          {/* Drawing row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setIsDrawingMode(!isDrawingMode)}
+              className={`duo-btn ${isDrawingMode ? 'duo-btn-blue' : 'duo-btn-secondary'}`}
+              style={{ padding: '4px 10px', fontSize: '12px' }}
+            >
+              {isDrawingMode ? '✏️ Đang vẽ' : '✏️ Vẽ màn hình'}
+            </button>
+
+            {isDrawingMode && (
+              <>
+                <button
+                  onClick={() => setTool(tool === 'pencil' ? 'eraser' : 'pencil')}
+                  className="duo-btn duo-btn-secondary"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  {tool === 'pencil' ? 'Bút' : 'Tẩy'}
+                </button>
+
+                {tool === 'pencil' && (
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setColor(c)}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          backgroundColor: c,
+                          border: color === c ? '2px solid #0f172a' : '1px solid #cbd5e1'
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={clearCurrentSlideDrawing}
+                  className="duo-btn duo-btn-danger"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  Xóa nét
+                </button>
+
+                <button
+                  onClick={persistDrawingToBackend}
+                  className="duo-btn duo-btn-green"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  Lưu nét
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Slide Presentation Stage */}
-      <main style={{
-        flex: 1,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-        overflow: 'hidden'
-      }}>
+      <main
+        style={{
+          flex: 1,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px',
+          overflow: 'hidden'
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div style={{
           width: '100%',
           maxWidth: '1280px',
@@ -424,7 +554,9 @@ export default function SlideViewer() {
                 ol: ({ node, ...props }) => <ol style={{ paddingLeft: '24px', marginBottom: '12px' }} {...props} />,
                 li: ({ node, ...props }) => <li style={{ marginBottom: '6px' }} {...props} />,
                 table: ({ node, ...props }) => (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', margin: '18px 0', border: '1px solid #e2e8f0', borderRadius: '8px' }} {...props} />
+                  <div style={{ overflowX: 'auto', margin: '18px 0' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e2e8f0', borderRadius: '8px' }} {...props} />
+                  </div>
                 ),
                 th: ({ node, ...props }) => (
                   <th style={{ background: '#f8fafc', padding: '10px 14px', border: '1px solid #e2e8f0', textAlign: 'left', color: '#0284c7', fontWeight: 600 }} {...props} />
@@ -463,47 +595,56 @@ export default function SlideViewer() {
 
       {/* Footer Navigation Bar */}
       <footer className="no-print" style={{
-        height: '64px',
+        height: '56px',
         background: '#ffffff',
         borderTop: '1px solid #e2e8f0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 32px',
+        padding: '0 20px',
         zIndex: 40
       }}>
         <button
           onClick={goToPrevSlide}
           disabled={currentSlideIndex === 0}
           className="duo-btn duo-btn-secondary"
-          style={{ opacity: currentSlideIndex === 0 ? 0.4 : 1, cursor: currentSlideIndex === 0 ? 'not-allowed' : 'pointer' }}
+          style={{ opacity: currentSlideIndex === 0 ? 0.4 : 1, cursor: currentSlideIndex === 0 ? 'not-allowed' : 'pointer', padding: '6px 14px', fontSize: '13px' }}
         >
-          Trước
+          ← Trước
         </button>
 
-        <div style={{ display: 'flex', gap: '6px' }}>
+        {/* Desktop Dots Navigation */}
+        <div className="slide-dots-desktop" style={{ display: 'flex', gap: '6px', maxWidth: '50vw', overflowX: 'auto', padding: '4px' }}>
           {lesson.slides.map((_, idx) => (
             <div
               key={idx}
               onClick={() => setCurrentSlideIndex(idx)}
               style={{
-                width: '8px',
+                width: currentSlideIndex === idx ? '16px' : '8px',
                 height: '8px',
-                borderRadius: '50%',
+                borderRadius: '4px',
                 background: currentSlideIndex === idx ? '#0284c7' : '#cbd5e1',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                flexShrink: 0
               }}
+              title={`Slide ${idx + 1}`}
             />
           ))}
+        </div>
+
+        {/* Mobile Slide Counter */}
+        <div className="slide-counter-mobile" style={{ display: 'none', fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>
+          {currentSlideIndex + 1} / {lesson.slides.length}
         </div>
 
         <button
           onClick={goToNextSlide}
           disabled={currentSlideIndex === lesson.slides.length - 1}
           className="duo-btn duo-btn-blue"
-          style={{ opacity: currentSlideIndex === lesson.slides.length - 1 ? 0.4 : 1, cursor: currentSlideIndex === lesson.slides.length - 1 ? 'not-allowed' : 'pointer' }}
+          style={{ opacity: currentSlideIndex === lesson.slides.length - 1 ? 0.4 : 1, cursor: currentSlideIndex === lesson.slides.length - 1 ? 'not-allowed' : 'pointer', padding: '6px 14px', fontSize: '13px' }}
         >
-          Tiếp theo
+          Tiếp theo →
         </button>
       </footer>
 
@@ -514,28 +655,11 @@ export default function SlideViewer() {
         onSelectAudio={(selected) => {
           if (!currentAudios.some(a => a.filename === selected.filename)) {
             setCurrentAudios(prev => [...prev, selected]);
+            toast.success(`Đã thêm audio: ${selected.title}`);
           }
         }}
         currentSelectedList={currentAudios}
       />
-
-      {/* Toast Notification */}
-      {saveToast && (
-        <div style={{
-          position: 'fixed',
-          top: '75px',
-          right: '20px',
-          background: '#0284c7',
-          color: '#ffffff',
-          padding: '8px 16px',
-          borderRadius: '8px',
-          fontWeight: 600,
-          fontSize: '13px',
-          zIndex: 999
-        }}>
-          {saveToast}
-        </div>
-      )}
     </div>
   );
 }

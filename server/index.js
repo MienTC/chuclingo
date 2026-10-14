@@ -55,8 +55,34 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Directories
-const DATA_DIR = path.join(__dirname, 'data');
+// Directories & Storage configuration
+// On Vercel / AWS Lambda, __dirname is read-only (/var/task/...).
+// We detect read-only environments and automatically fall back to /tmp/chuclingo_data.
+const SEED_DATA_DIR = path.join(__dirname, 'data');
+let DATA_DIR = SEED_DATA_DIR;
+
+const isServerless = Boolean(
+  process.env.VERCEL || 
+  process.env.AWS_LAMBDA_FUNCTION_NAME || 
+  process.env.LAMBDA_TASK_ROOT
+);
+
+if (isServerless) {
+  DATA_DIR = path.join('/tmp', 'chuclingo_data');
+} else {
+  try {
+    if (!fs.existsSync(SEED_DATA_DIR)) {
+      fs.mkdirSync(SEED_DATA_DIR, { recursive: true });
+    }
+    const testFile = path.join(SEED_DATA_DIR, '.write_test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+  } catch (err) {
+    console.warn('SEED_DATA_DIR is read-only, falling back to /tmp/chuclingo_data:', err.message);
+    DATA_DIR = path.join('/tmp', 'chuclingo_data');
+  }
+}
+
 const LESSONS_DIR = path.join(DATA_DIR, 'lessons');
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 const ANNOTATIONS_DIR = path.join(DATA_DIR, 'annotations');
@@ -65,18 +91,79 @@ const TOPICS_FILE = path.join(DATA_DIR, 'topics.json');
 
 [DATA_DIR, LESSONS_DIR, AUDIO_DIR, ANNOTATIONS_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.warn('Could not create directory:', dir, e.message);
+    }
   }
 });
 
+// Seed data from repository bundle into writable directory if running in serverless /tmp
+function seedDataIfEmpty() {
+  if (DATA_DIR === SEED_DATA_DIR || !fs.existsSync(SEED_DATA_DIR)) return;
+  try {
+    // Copy topics
+    const seedTopics = path.join(SEED_DATA_DIR, 'topics.json');
+    if (!fs.existsSync(TOPICS_FILE) && fs.existsSync(seedTopics)) {
+      fs.copyFileSync(seedTopics, TOPICS_FILE);
+    }
+    // Copy audio metadata
+    const seedMeta = path.join(SEED_DATA_DIR, 'audio_metadata.json');
+    if (!fs.existsSync(METADATA_FILE) && fs.existsSync(seedMeta)) {
+      fs.copyFileSync(seedMeta, METADATA_FILE);
+    }
+    // Copy lessons
+    const seedLessonsDir = path.join(SEED_DATA_DIR, 'lessons');
+    if (fs.existsSync(seedLessonsDir)) {
+      const files = fs.readdirSync(seedLessonsDir);
+      for (const file of files) {
+        const dest = path.join(LESSONS_DIR, file);
+        if (!fs.existsSync(dest)) {
+          fs.copyFileSync(path.join(seedLessonsDir, file), dest);
+        }
+      }
+    }
+    // Copy audio
+    const seedAudioDir = path.join(SEED_DATA_DIR, 'audio');
+    if (fs.existsSync(seedAudioDir)) {
+      const files = fs.readdirSync(seedAudioDir);
+      for (const file of files) {
+        const dest = path.join(AUDIO_DIR, file);
+        if (!fs.existsSync(dest)) {
+          fs.copyFileSync(path.join(seedAudioDir, file), dest);
+        }
+      }
+    }
+    // Copy annotations
+    const seedAnnotDir = path.join(SEED_DATA_DIR, 'annotations');
+    if (fs.existsSync(seedAnnotDir)) {
+      const files = fs.readdirSync(seedAnnotDir);
+      for (const file of files) {
+        const dest = path.join(ANNOTATIONS_DIR, file);
+        if (!fs.existsSync(dest)) {
+          fs.copyFileSync(path.join(seedAnnotDir, file), dest);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Seed data warning:', err.message);
+  }
+}
+seedDataIfEmpty();
+
 // Initialize topics if not existing
 if (!fs.existsSync(TOPICS_FILE)) {
-  fs.writeFileSync(TOPICS_FILE, JSON.stringify(['Giao tiếp tiếng Trung', 'Từ vựng HSK', 'Phản xạ giao tiếp', 'Tiếng Trung thương mại'], null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(TOPICS_FILE, JSON.stringify(['Giao tiếp tiếng Trung', 'Từ vựng HSK', 'Phản xạ giao tiếp', 'Tiếng Trung thương mại'], null, 2), 'utf-8');
+  } catch (e) {}
 }
 
 // Initialize audio metadata if not existing
 if (!fs.existsSync(METADATA_FILE)) {
-  fs.writeFileSync(METADATA_FILE, JSON.stringify({}, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(METADATA_FILE, JSON.stringify({}, null, 2), 'utf-8');
+  } catch (e) {}
 }
 
 function getAudioMetadata() {
@@ -100,7 +187,7 @@ function getTopics() {
       return JSON.parse(fs.readFileSync(TOPICS_FILE, 'utf-8'));
     }
   } catch (e) {}
-  return ['Giao tiếp tiếng Trung'];
+  return ['Giao tiếp tiếng Trung', 'Từ vựng HSK'];
 }
 
 function saveTopics(topics) {
@@ -111,6 +198,9 @@ function saveTopics(topics) {
 
 // Static files for audio
 app.use('/audio', express.static(AUDIO_DIR));
+if (DATA_DIR !== SEED_DATA_DIR && fs.existsSync(path.join(SEED_DATA_DIR, 'audio'))) {
+  app.use('/audio', express.static(path.join(SEED_DATA_DIR, 'audio')));
+}
 
 // Configure Multer for audio & markdown upload
 const storage = multer.diskStorage({
@@ -236,6 +326,7 @@ app.post('/api/topics', (req, res) => {
 // 2. GET /api/lessons - List all lessons
 app.get('/api/lessons', (req, res) => {
   try {
+    seedDataIfEmpty();
     const files = fs.readdirSync(LESSONS_DIR).filter((f) => f.endsWith('.md'));
     const meta = getAudioMetadata();
     const lessons = files.map((file) => {
@@ -272,10 +363,20 @@ app.get('/api/lessons/:id', (req, res) => {
   try {
     const { id } = req.params;
     const filename = `${id}.md`;
-    const fullPath = path.join(LESSONS_DIR, filename);
+    let fullPath = path.join(LESSONS_DIR, filename);
 
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ success: false, message: 'Bài học không tồn tại' });
+      // Check if it's in SEED_DATA_DIR
+      const seedPath = path.join(SEED_DATA_DIR, 'lessons', filename);
+      if (fs.existsSync(seedPath)) {
+        try {
+          fs.copyFileSync(seedPath, fullPath);
+        } catch (e) {
+          fullPath = seedPath;
+        }
+      } else {
+        return res.status(404).json({ success: false, message: 'Bài học không tồn tại' });
+      }
     }
 
     const content = fs.readFileSync(fullPath, 'utf-8');
@@ -320,7 +421,19 @@ app.post('/api/lessons', upload.single('markdown'), async (req, res) => {
       const parsed = matter(markdown);
       const data = parsed.data || {};
       
-      data.title = title || data.title || autoId;
+      let detectedTitle = title;
+      if (!detectedTitle || !detectedTitle.trim()) {
+        if (data.title) {
+          detectedTitle = data.title;
+        } else {
+          const headingMatch = parsed.content.match(/^#\s+(.+)$/m);
+          if (headingMatch) {
+            detectedTitle = headingMatch[1].replace(/^[0-9.]+\s*/, '').trim();
+          }
+        }
+      }
+
+      data.title = (detectedTitle && detectedTitle.trim()) ? detectedTitle.trim() : autoId;
       data.topic = topic || data.topic || 'Giao tiếp tiếng Trung';
       
       if (audios) {
